@@ -1,4 +1,4 @@
-let api_url = "http://"+location.hostname+":11434"
+let api_url = "http://" + location.hostname + ":11434"
 let model = ""
 let options = {
     temperature: 1,
@@ -18,43 +18,45 @@ async function init() {
     model = resp.models[0].name
     console.log("Model:", model)
 
-    doc.addEventListener("keydown", e => {
+    doc.addEventListener("keydown", async e => {
         console.log("e", e)
         printEnabled = false
         reader?.cancel()
         clearTimeout(reqTO)
         if (!doc.value.trim()) doc.value = sessionStorage.getItem("doc")
+        else sessionStorage.setItem("doc", doc.value)
+        doc.value = doc.value.trimStart().replace("\n\n\n\n", "\n\n\n")
         let txt = doc.value
         let start = doc.selectionStart
         let end = doc.selectionEnd
         if (e.key == "Tab") {
             e.preventDefault()
-            doc.selectionStart = txt.indexOf(" ", start) + 1
-        }
-        if (e.ctrlKey && e.key == "Enter") {
-            doc.value += "\n\n\nuser: "
-            doc.scrollBy(0, doc.scrollHeight)
-            return
-        }
-        reqTO = setTimeout(async () => {
-            if (txt != doc.value && doc.selectionStart == doc.value.length) {
-                if (getMessages(doc.value).pop().role != "assistant") {
+            let head = doc.value.slice(0, end)
+            if (head.indexOf(" ", start) > 0)
+                doc.selectionStart = head.indexOf(" ", start) + 1
+            else {
+                /*reqTO = setTimeout(async () => { if (txt != doc.value && doc.selectionStart == doc.value.length) {*/
+                if (getMessages(head).pop().role != "assistant") {
                     printEnabled = true
-                    print("\n\n\nassistant: ")
+                    print("\n\n\nassistant: ", true)
                 }
                 await process()
-                sessionStorage.setItem("doc", doc.value)
+                print("\n\n\nuser: ", true)
+                /*} }, 1024)*/
             }
-        }, 1024)
+        }
+        if (e.ctrlKey && e.key == "Enter") {
+            printEnabled = true
+            print("\n\n\nuser: ")
+            return
+        }
     })
 }
 
 async function process(e) {
     let payload = {
         model: model, options: options,
-        messages: getMessages(doc.value)
-        //prompt: doc.value//.slice(0, doc.value.lastIndexOf("\n\n\n")),
-        //suffix: doc.value//.slice(doc.value.lastIndexOf("\n\n\n"))
+        messages: getMessages(doc.value.slice(0, doc.selectionEnd))
     }
     let resp = await fetch(api_url + "/api/chat", { method: "POST", body: JSON.stringify(payload) })
     reader = resp.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -70,10 +72,9 @@ async function process(e) {
             let token = JSON.parse(queue.slice(0, queue.indexOf("\n")))
             console.log(token)
             queue = queue.slice(queue.indexOf("\n")).trimStart()
-            print(token.message.content)
+            print(token.message.content, true)
         }
     }
-    print("\n\n\nuser: ")
 }
 
 function getMessages(str) {
@@ -95,12 +96,15 @@ function getMessages(str) {
 }
 
 let printEnabled
-function print(str) {
+function print(str, select) {
     if (!printEnabled) return
     let start = doc.selectionStart
-    doc.value += str
-    // doc.scrollBy(0, 1024)
-    doc.selectionStart = start
+    let end = doc.selectionEnd
+    doc.value = doc.value.slice(0, end) + str + doc.value.slice(end)
+    doc.selectionEnd = end + str.length
+    if (select) doc.selectionStart = start
+    else doc.selectionStart = doc.selectionEnd
+    doc.scrollBy(0, str.length)
 }
 
 init()
