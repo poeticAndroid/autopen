@@ -1,4 +1,4 @@
-let api_url = "http://" + location.hostname + ":11434"
+let api_url = "http://localhost:11434"
 let model = ""
 let options = {
     temperature: 1,
@@ -108,3 +108,4 @@ function print(str, select) {
 }
 
 init()
+navigator.serviceWorker.register("./sw.js", { scope: "./" })
